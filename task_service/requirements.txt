@@ -1,5 +1,6 @@
 fastapi
-uvicorn
+uvicorn[standard]
 motor
 pydantic
 pika
+aio_pika

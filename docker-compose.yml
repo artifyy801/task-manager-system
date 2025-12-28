@@ -41,6 +41,7 @@ services:
   notification_service:
     build: ./notification_service
     container_name: notification_service
+    restart: always
     depends_on:
       - rabbitmq
 
