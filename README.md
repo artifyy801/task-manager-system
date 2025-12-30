@@ -2,7 +2,7 @@ Getting Started
 
 Prerequisites
 
-Docker & Docker Compose installed on your machine.
+   Docker & Docker Compose installed on your machine.
 
 Installation & Running
 1. Clone the repository:
