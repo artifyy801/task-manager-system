@@ -16,6 +16,8 @@ app = FastAPI()
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
 
 # 2. Enable CORS (So Frontend can connect)
 app.add_middleware(
@@ -27,7 +29,7 @@ app.add_middleware(
 )
 
 # Database Connection
-client = AsyncIOMotorClient("mongodb://mongodb:27017")
+client = AsyncIOMotorClient(MONGO_URL)
 db = client.task_db
 tasks_collection = db.tasks
 
@@ -54,9 +56,9 @@ manager = ConnectionManager()
 # --- BACKGROUND LISTENER (The Feedback Loop) ---
 async def consume_updates():
     # Wait for RabbitMQ to start
-    await asyncio.sleep(5) 
+    # await asyncio.sleep(5) 
     try:
-        connection = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
+        connection = await aio_pika.connect_robust(RABBITMQ_URL)
         queue_name = "task_updates"
 
         async with connection:
@@ -115,7 +117,7 @@ async def create_task(
     new_task = await tasks_collection.insert_one(task_dict)
     
     # 3. Send to RabbitMQ (Async)
-    connection = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
+    connection = await aio_pika.connect_robust(RABBITMQ_URL)
     async with connection:
         channel = await connection.channel()
         # Declare queue to be safe

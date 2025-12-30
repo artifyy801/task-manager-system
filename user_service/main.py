@@ -13,9 +13,10 @@ app = FastAPI()
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 
 # --- DB CONNECTION ---
-client = AsyncIOMotorClient("mongodb://mongodb:27017")
+client = AsyncIOMotorClient(MONGO_URL)
 db = client.task_db
 users_collection = db.users
 

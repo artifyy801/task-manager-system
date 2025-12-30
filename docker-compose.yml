@@ -18,6 +18,12 @@ services:
       - "5672:5672"   # The communication port
       - "15672:15672" # The Dashboard port
 
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # 3. User Service (Runs on 8000)
   user_service:
     build: ./user_service
@@ -42,6 +48,9 @@ services:
     depends_on:
       - mongodb
       - rabbitmq
+
+    rabbitmq:
+        condition: service_healthy
 
   # 5. Notification Worker (No ports needed, it runs in background)
   notification_service:

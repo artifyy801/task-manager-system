@@ -56,7 +56,11 @@ def callback(ch, method, properties, body):
 # --- 3. The Main Function ---
 def main():
     # Connect to RabbitMQ
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+    rabbitmq_host = os.getenv("RABBITMQ_HOST", "localhost")
+    
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host=rabbitmq_host)
+    )
     channel = connection.channel()
 
     # Declare the queues (Fixes the 404 error)
