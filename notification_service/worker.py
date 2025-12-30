@@ -43,7 +43,7 @@ def callback(ch, method, properties, body):
     }
 
     # Send feedback to the API (task_updates queue)
-    ch.queue_declare(queue='task_updates') 
+    # ch.queue_declare(queue='task_updates') 
     ch.basic_publish(
         exchange='',
         routing_key='task_updates',

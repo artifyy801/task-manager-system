@@ -21,6 +21,9 @@ services:
   # 3. User Service (Runs on 8000)
   user_service:
     build: ./user_service
+    environment:
+      - SECRET_KEY=my_super_secret_key
+      - ALGORITHM=HS256
     container_name: user_service
     ports:
       - "8000:8000"
@@ -30,6 +33,9 @@ services:
   # 4. Task Service (Runs on 8001)
   task_service:
     build: ./task_service
+    environment:
+      - SECRET_KEY=my_super_secret_key
+      - ALGORITHM=HS256
     container_name: task_service
     ports:
       - "8001:8001"

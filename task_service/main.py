@@ -1,15 +1,23 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import json
 import aio_pika
-from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from jose import jwt, JWTError
+import os
+from dotenv import load_dotenv
 
 app = FastAPI()
 
-# 1. Enable CORS (So Frontend can connect)
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+
+# 2. Enable CORS (So Frontend can connect)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -53,6 +61,7 @@ async def consume_updates():
 
         async with connection:
             channel = await connection.channel()
+            # Ensure queue exists before listening
             queue = await channel.declare_queue(queue_name)
 
             async with queue.iterator() as queue_iter:
@@ -74,19 +83,38 @@ async def startup_event():
     loop = asyncio.get_event_loop()
     loop.create_task(consume_updates())
 
-# --- API ENDPOINTS ---
+# --- API ENDPOINTS & SECURITY ---
 
-class Task(BaseModel):
+class TaskCreate(BaseModel):
     title: str
-    user_email: str
-    createdAt: datetime = Field(default_factory=datetime.now)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# DEPENDENCY: Verify Token & Extract Email
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_email: str = payload.get("sub")
+        if user_email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_email
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 @app.post("/tasks")
-async def create_task(task: Task):
-    # 1. Save to DB
-    new_task = await tasks_collection.insert_one(task.model_dump())
+async def create_task(
+    task: TaskCreate, 
+    user_email: str = Depends(get_current_user) # <--- SECURITY INJECTED HERE
+):
+    # 1. Prepare Data (Combine input with Secure Email)
+    task_dict = task.model_dump()
+    task_dict["user_email"] = user_email
+    task_dict["createdAt"] = datetime.now()
+
+    # 2. Save to DB
+    new_task = await tasks_collection.insert_one(task_dict)
     
-    # 2. Send to RabbitMQ (Async)
+    # 3. Send to RabbitMQ (Async)
     connection = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
     async with connection:
         channel = await connection.channel()
@@ -95,7 +123,7 @@ async def create_task(task: Task):
         
         message = {
             "title": task.title,
-            "user_email": task.user_email,
+            "user_email": user_email,
             "task_id": str(new_task.inserted_id)
         }
         
@@ -106,7 +134,7 @@ async def create_task(task: Task):
         
     return {"message": "Task sent to background worker"}
 
-# THE MISSING PIECE: The WebSocket Endpoint
+# The WebSocket Endpoint
 @app.websocket("/ws/{user_email}")
 async def websocket_endpoint(websocket: WebSocket, user_email: str):
     await manager.connect(websocket, user_email)

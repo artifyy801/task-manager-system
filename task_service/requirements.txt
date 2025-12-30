@@ -4,3 +4,5 @@ motor
 pydantic
 pika
 aio_pika
+python-dotenv
+python-jose[cryptography]

@@ -3,104 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bank Statement Generator</title>
+    <title>Bank Statement Portal (Secure)</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f4f4f9; }
-        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
-        button { background-color: #28a745; color: white; border: none; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #218838; }
-        #status-log { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; }
-        .log-entry { padding: 10px; border-bottom: 1px solid #eee; }
-        .log-entry.completed { background-color: #d4edda; color: #155724; }
-        .log-entry.processing { color: #856404; background-color: #fff3cd; }
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .container { border: 1px solid #ccc; padding: 2rem; border-radius: 8px; }
+        input { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; width: 100%; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+        .hidden { display: none; }
+        #status { margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 4px; }
+        .error { color: red; margin-top: 5px; }
+        h2 { margin-top: 0; }
+        
+        /* Tab Styles for Login/Register */
+        .auth-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { background: #eee; color: black; flex: 1; }
+        .tab-btn.active { background: #007bff; color: white; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🏦 Bank Statement Dashboard</h1>
-    
-    <div id="connection-section">
-        <h3>1. Identity</h3>
-        <input type="text" id="email" placeholder="Enter your email (e.g., neeru@bank.com)" value="neeru@bank.com">
-        <button onclick="connect()">🔌 Connect to Live Server</button>
-        <p id="connection-status" style="color: red;">Disconnected</p>
+    <h1>🏦 Secure Bank Portal</h1>
+
+    <div id="auth-section" class="container">
+        <div class="auth-tabs">
+            <button class="tab-btn active" onclick="showForm('login')">Login</button>
+            <button class="tab-btn" onclick="showForm('register')">Register</button>
+        </div>
+
+        <div id="login-form">
+            <h2>Login</h2>
+            <input type="email" id="login-email" placeholder="Email (e.g., neeru@bank.com)">
+            <input type="password" id="login-password" placeholder="Password">
+            <button onclick="login()">Login & Access Dashboard</button>
+        </div>
+
+        <div id="register-form" class="hidden">
+            <h2>Register New User</h2>
+            <input type="text" id="reg-username" placeholder="Username">
+            <input type="email" id="reg-email" placeholder="Email">
+            <input type="password" id="reg-password" placeholder="Password">
+            <button onclick="register()">Create Account</button>
+        </div>
+        <p id="auth-error" class="error"></p>
     </div>
 
-    <hr>
+    <div id="dashboard-section" class="container hidden">
+        <h2>Welcome, <span id="user-display"></span>!</h2>
+        <p>Status: <span id="ws-status" style="color: orange;">🔴 Disconnected</span></p>
+        
+        <div style="margin-top: 20px;">
+            <h3>Your Actions</h3>
+            <p>Click below to request your monthly statement. The request will be processed securely in the background.</p>
+            <button onclick="generateStatement()" style="background-color: #28a745;">📄 Generate Monthly Statement</button>
+        </div>
 
-    <div id="task-section" style="display:none;">
-        <h3>2. Actions</h3>
-        <p>Request a heavy background task:</p>
-        <button onclick="requestStatement()">📄 Generate Monthly Statement</button>
+        <div id="status">No recent activity.</div>
+        <button onclick="logout()" style="background-color: #dc3545; margin-top: 30px;">Logout</button>
     </div>
 
-    <div id="status-log">
-        <h3>3. Live Updates (WebSocket)</h3>
-        <div id="logs"></div>
-    </div>
-</div>
+    <script>
+        // --- CONFIGURATION ---
+        const USER_SERVICE_URL = "http://localhost:8000";
+        const TASK_SERVICE_URL = "http://localhost:8001";
+        
+        let ws = null;
+        let currentUserEmail = "";
+        let authToken = "";
 
-<script>
-    let ws = null;
-    let userEmail = "";
+        // --- AUTH FUNCTIONS ---
 
-    function connect() {
-        userEmail = document.getElementById("email").value;
-        // Connect to the WebSocket endpoint we built in task_service
-        ws = new WebSocket(`ws://localhost:8001/ws/${userEmail}`);
+        async function login() {
+            const email = document.getElementById("login-email").value;
+            const password = document.getElementById("login-password").value;
+            const errorMsg = document.getElementById("auth-error");
 
-        ws.onopen = () => {
-            document.getElementById("connection-status").innerText = "✅ Connected (Listening for updates...)";
-            document.getElementById("connection-status").style.color = "green";
-            document.getElementById("task-section").style.display = "block";
-            log("System", "Connected to Real-time Notification Service", "normal");
-        };
+            try {
+                const response = await fetch(`${USER_SERVICE_URL}/login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            // This is where the Worker talks back to the User!
-            log("Worker", `Status: ${data.status} - ${data.message}`, "completed");
-        };
+                const data = await response.json();
 
-        ws.onclose = () => {
-            document.getElementById("connection-status").innerText = "❌ Disconnected";
-            document.getElementById("connection-status").style.color = "red";
-        };
-    }
+                if (!response.ok) throw new Error(data.detail || "Login failed");
 
-    async function requestStatement() {
-        if (!userEmail) return alert("Connect first!");
+                // SUCCESS: Save Token & Switch to Dashboard
+                authToken = data.access_token;
+                currentUserEmail = email;
+                
+                // Save to LocalStorage (So refresh works)
+                localStorage.setItem("token", authToken);
+                localStorage.setItem("email", currentUserEmail);
 
-        log("Me", "Requesting Bank Statement...", "processing");
+                switchToDashboard();
 
-        // Send HTTP Request to API (The "Trigger")
-        const response = await fetch("http://localhost:8001/tasks", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                title: "Generate Statement",
-                user_email: userEmail
-            })
-        });
-
-        if (response.ok) {
-            log("API", "Request Received (200 OK). Worker started in background...", "normal");
-        } else {
-            log("API", "Error sending request", "error");
+            } catch (err) {
+                errorMsg.innerText = "Error: " + err.message;
+            }
         }
-    }
 
-    function log(sender, message, type) {
-        const logsDiv = document.getElementById("logs");
-        const div = document.createElement("div");
-        div.className = `log-entry ${type}`;
-        div.innerHTML = `<strong>${sender}:</strong> ${message}`;
-        logsDiv.prepend(div); // Add new logs to the top
-    }
-</script>
+        async function register() {
+            const username = document.getElementById("reg-username").value;
+            const email = document.getElementById("reg-email").value;
+            const password = document.getElementById("reg-password").value;
+            const errorMsg = document.getElementById("auth-error");
 
+            try {
+                const response = await fetch(`${USER_SERVICE_URL}/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, email, password })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || "Registration failed");
+                }
+
+                alert("Registration Successful! Please Login.");
+                showForm('login');
+
+            } catch (err) {
+                errorMsg.innerText = "Error: " + err.message;
+            }
+        }
+
+        // --- DASHBOARD FUNCTIONS ---
+
+        function switchToDashboard() {
+            document.getElementById("auth-section").classList.add("hidden");
+            document.getElementById("dashboard-section").classList.remove("hidden");
+            document.getElementById("user-display").innerText = currentUserEmail;
+            
+            connectWebSocket();
+        }
+
+        function connectWebSocket() {
+            if (ws) return; // Already connected
+
+            // Connect to WebSocket using the Email
+            ws = new WebSocket(`${TASK_SERVICE_URL.replace("http", "ws")}/ws/${currentUserEmail}`);
+
+            ws.onopen = () => {
+                document.getElementById("ws-status").innerText = "🟢 Connected (Live)";
+                document.getElementById("ws-status").style.color = "green";
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const statusDiv = document.getElementById("status");
+                
+                statusDiv.innerHTML = `
+                    <strong>📩 New Notification:</strong><br>
+                    ${data.message}<br>
+                    <small>Status: ${data.status}</small>
+                `;
+                statusDiv.style.backgroundColor = "#d4edda"; // Light green
+                
+                // Trigger Browser Alert
+                alert(`System Update:\n${data.message}`);
+            };
+
+            ws.onclose = () => {
+                document.getElementById("ws-status").innerText = "🔴 Disconnected";
+                document.getElementById("ws-status").style.color = "red";
+                ws = null;
+            };
+        }
+
+        async function generateStatement() {
+            if (!authToken) {
+                alert("You are not logged in!");
+                return;
+            }
+
+            try {
+                // 🔐 THE KEY CHANGE: Sending the Token in Headers
+                const response = await fetch(`${TASK_SERVICE_URL}/tasks`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${authToken}` // <--- VIP BADGE ATTACHED
+                    },
+                    body: JSON.stringify({ 
+                        title: "Monthly Statement" 
+                        // Note: We do NOT send user_email anymore. The backend extracts it from the token.
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById("status").innerText = "⏳ Request Sent... Waiting for Worker...";
+                    document.getElementById("status").style.backgroundColor = "#fff3cd"; // Yellow
+                } else {
+                    const err = await response.json();
+                    alert("Error: " + (err.detail || "Request failed"));
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Network Error");
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            location.reload(); // Refresh page to go back to login
+        }
+
+        // --- UI HELPERS ---
+        function showForm(type) {
+            document.getElementById("auth-error").innerText = "";
+            if (type === 'login') {
+                document.getElementById("login-form").classList.remove("hidden");
+                document.getElementById("register-form").classList.add("hidden");
+            } else {
+                document.getElementById("login-form").classList.add("hidden");
+                document.getElementById("register-form").classList.remove("hidden");
+            }
+        }
+
+        // Check if already logged in on page load
+        window.onload = () => {
+            const savedToken = localStorage.getItem("token");
+            const savedEmail = localStorage.getItem("email");
+            if (savedToken && savedEmail) {
+                authToken = savedToken;
+                currentUserEmail = savedEmail;
+                switchToDashboard();
+            }
+        };
+    </script>
 </body>
 </html>
