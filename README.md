@@ -20,18 +20,9 @@ Installation & Running
 
 
 Testing the Flow
-
-Register/Login: Open the Frontend  and create an account.
-
-Generate Statement: Click "Generate Monthly Statement".
-
-Watch the Magic:
-
-The request is sent to the Task Service.
-
-Task Service pushes a message to RabbitMQ.
-
-
-Notification Worker picks it up, generates a PDF, and simulates a delay.
-
-Once done, the Frontend receives a Real-Time Notification via WebSocket.
+1. Register/Login: Open the Frontend  and create an account.
+2. Generate Statement: Click "Generate Monthly Statement".
+3. The request is sent to the Task Service.
+4. Task Service pushes a message to RabbitMQ.
+5. Notification Worker picks it up, generates a PDF, and simulates a delay.
+6. Once done, the Frontend receives a Real-Time Notification via WebSocket.
